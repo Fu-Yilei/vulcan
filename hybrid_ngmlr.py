@@ -188,6 +188,9 @@ def merge_bam_files(under_value_bam, above_value_bam, final_output):
     logger.info(f"Executing: {merge_bam_cmd}")
     os.system(merge_bam_cmd)
 
+def generate_config_for_notebook():
+    #TODO
+    return 
 
 def main(argv):
     global THREADS, WORK_DIR
