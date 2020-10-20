@@ -186,7 +186,7 @@ def merge_bam_files(under_value_bam, above_value_bam, final_output):
 def generate_config_for_notebook(percentile, final_output, raw_edit_distance):
     # TODO
     work_dir = WORK_DIR
-    config_file = os.path.join("config")
+    config_file = os.path.expanduser("~/.hybrid_ngmlr_config")
 
     threads = THREADS
     percentile = percentile
