@@ -51,6 +51,8 @@ def parseArgs(argv):
                         help="percentile of cut-off, default: 50", default=50)
     parser.add_argument("-r", "--reference", type=str,
                         help="raference path")
+    parser.add_argument("-d", "--dry",
+                        help="only generate config", action="store_true")
     parser.add_argument("-R", "--raw_edit_distance",
                         help="Use raw edit distance to do the cut-off", action="store_true")
     parser.add_argument(
@@ -89,6 +91,13 @@ def keep_primary_mapping(input_sam, output_sam):
     logger.info(f"Executing: {samtools_cmd}")
     os.system(samtools_cmd)
     return output_sam
+
+
+def sort_bam_from_bam(input_bam, output_bam):
+    sort_bam_cmd = f"samtools sort -@ {THREADS} {input_bam} > {output_bam}"
+    logger.info(f"Executing: {sort_bam_cmd}")
+    os.system(sort_bam_cmd)
+    return output_bam
 
 
 def generate_distance_file(input_sam, output_txt, raw_edit_distance):
@@ -145,22 +154,9 @@ def seperate_sam_files(input_sam, under_value_bam, above_value_bam, cut_off_valu
     else:
         logger.info(
             f"Splitting sam file with normalized edit distance {cut_off_value}")
-        # above_value_sam = f"{input_sam[:-4]}_above.sam"
-        # under_value_sam = f"{input_sam[:-4]}_under.sam"
         samfile = pysam.AlignmentFile(input_sam, "r")
         above_f = pysam.AlignmentFile(above_value_bam, "wb", template=samfile)
         under_f = pysam.AlignmentFile(under_value_bam, "wb", template=samfile)
-
-        # with open(input_sam, "r") as input_f:
-
-        # with open(above_value_sam, "w") as above_f:
-        #     with open(under_value_sam, "w") as under_f:
-        # for line in input_f:
-        #     if line[0] == "@":
-        #         above_f.writelines(line)
-        #         under_f.writelines(line)
-        #     else:
-        #         break
         for read in tqdm(samfile.fetch()):
             tags = dict(read.tags)
             if "NM" in tags:
@@ -171,9 +167,6 @@ def seperate_sam_files(input_sam, under_value_bam, above_value_bam, cut_off_valu
                     above_f.write(read)
                 else:
                     under_f.write(read)
-        # generate_sorted_bam(above_value_sam, above_value_bam)
-        # generate_sorted_bam(under_value_sam, under_value_bam)
-    # logger.info("sam file split finished")
 
 
 def bam_to_reads(input_bam, output_reads):
@@ -183,14 +176,44 @@ def bam_to_reads(input_bam, output_reads):
 
 
 def merge_bam_files(under_value_bam, above_value_bam, final_output):
-    # final_output = os.path.join(WORK_DIR, "hybrid_NGMLR.bam")
-    merge_bam_cmd = f"samtools merge {final_output} {under_value_bam} {above_value_bam} -@ {THREADS}"
+    final_unsorted_bam = os.path.join(WORK_DIR, "final_unsorted.bam")
+    merge_bam_cmd = f"samtools merge {final_unsorted_bam} {under_value_bam} {above_value_bam} -@ {THREADS}"
     logger.info(f"Executing: {merge_bam_cmd}")
     os.system(merge_bam_cmd)
+    sort_bam_from_bam(final_unsorted_bam, final_output)
 
-def generate_config_for_notebook():
-    #TODO
-    return 
+
+def generate_config_for_notebook(percentile, final_output, raw_edit_distance):
+    # TODO
+    work_dir = WORK_DIR
+    config_file = os.path.join("config")
+
+    threads = THREADS
+    percentile = percentile
+    ngmlr_above_bam = os.path.join(work_dir, f"ngmlr_above{percentile}.bam")
+    ngmlr_above_sam = os.path.join(work_dir, f"ngmlr_above{percentile}.sam")
+    ngmlr_above_edit_distance = os.path.join(
+        work_dir, f"ngmlr_above{percentile}_distance.txt")
+    minimap2_above_bam = os.path.join(
+        work_dir, f"minimap2_above{percentile}.bam")
+    minimap2_above_sam = os.path.join(
+        work_dir, f"minimap2_above{percentile}.sam")
+    minimap2_above_edit_distance = os.path.join(
+        work_dir, f"minimap2_above{percentile}_distance.txt")
+    minimap2_full_bam = os.path.join(
+        work_dir, f"minimap2_full.bam")
+    minimap2_full_edit_distance = os.path.join(
+        work_dir, "minimap2_full_distance.txt")
+    final_bam = final_output
+    final_sam = os.path.join(work_dir, "final.sam")
+    final_edit_distance = os.path.join(work_dir, "final_edit_distance.txt")
+    raw_edit_distance = int(raw_edit_distance)
+    config_list = [threads, percentile, work_dir, ngmlr_above_bam, ngmlr_above_sam, ngmlr_above_edit_distance, minimap2_above_bam,
+                   minimap2_above_sam, minimap2_above_edit_distance, minimap2_full_bam, minimap2_full_edit_distance, final_bam, final_sam, final_edit_distance, raw_edit_distance]
+    with open(config_file, "w") as config_f:
+        for config in config_list:
+            config_f.writelines(f"{config}\n")
+
 
 def main(argv):
     global THREADS, WORK_DIR
@@ -208,7 +231,12 @@ def main(argv):
 
     pacbio = args.pacbio
     final_output = args.output
-    print(f"RAW: {raw_edit_distance}, pacbio: {pacbio}")
+    if args.dry:
+        generate_config_for_notebook(
+            percentile, final_output, raw_edit_distance)
+        exit()
+
+    # print(f"RAW: {raw_edit_distance}, pacbio: {pacbio}")
     # LOG = os.path.join(WORK_DIR, "log.log")
     minimap2_full_sam = os.path.join(WORK_DIR, "minimap2_full.sam")
     minimap2_full_sam_primary = os.path.join(
@@ -254,6 +282,10 @@ def main(argv):
     logger.info("...finished")
     logger.info("merge NGMLR's result and minimap2's under cut-off results")
     merge_bam_files(minimap2_under_percentile_bam, ngmlr_output, final_output)
+    logger.info("...finished")
+    logger.info("Generating configs for jupyter notebook evaluation")
+    generate_config_for_notebook(
+        percentile, final_output, raw_edit_distance)
     logger.info("...finished")
     logger.info("All Finished")
 
