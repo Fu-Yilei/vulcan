@@ -62,10 +62,12 @@ def parseArgs(argv):
     return args
 
 
-def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output,  if_pacbio):
+def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, if_pacbio):
     if if_pacbio:
+        logger.info("Use minimap2 PacBio parameter")
         minimap2_cmd = f"minimap2 -x map-pb -a -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
     else:
+        logger.info("Use minimap2 Nanopore parameter")
         minimap2_cmd = f"minimap2 -x map-ont -a -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
 
     logger.info(f"Executing: {minimap2_cmd}")
@@ -190,23 +192,27 @@ def generate_config_for_notebook(percentile, final_output, raw_edit_distance):
 
     threads = THREADS
     percentile = percentile
-    ngmlr_above_bam = os.path.join(work_dir, f"ngmlr_above{percentile}.bam")
-    ngmlr_above_sam = os.path.join(work_dir, f"ngmlr_above{percentile}.sam")
-    ngmlr_above_edit_distance = os.path.join(
-        work_dir, f"ngmlr_above{percentile}_distance.txt")
-    minimap2_above_bam = os.path.join(
-        work_dir, f"minimap2_above{percentile}.bam")
-    minimap2_above_sam = os.path.join(
-        work_dir, f"minimap2_above{percentile}.sam")
-    minimap2_above_edit_distance = os.path.join(
-        work_dir, f"minimap2_above{percentile}_distance.txt")
-    minimap2_full_bam = os.path.join(
-        work_dir, f"minimap2_full.bam")
-    minimap2_full_edit_distance = os.path.join(
-        work_dir, "minimap2_full_distance.txt")
-    final_bam = final_output
-    final_sam = os.path.join(work_dir, "final.sam")
-    final_edit_distance = os.path.join(work_dir, "final_edit_distance.txt")
+
+    ngmlr_above_bam = os.path.abspath(os.path.join(
+        work_dir, f"ngmlr_above{percentile}.bam"))
+    ngmlr_above_sam = os.path.abspath(os.path.join(
+        work_dir, f"ngmlr_above{percentile}.sam"))
+    ngmlr_above_edit_distance = os.path.abspath(os.path.join(
+        work_dir, f"ngmlr_above{percentile}_distance.txt"))
+    minimap2_above_bam = os.path.abspath(os.path.join(
+        work_dir, f"minimap2_above{percentile}.bam"))
+    minimap2_above_sam = os.path.abspath(os.path.join(
+        work_dir, f"minimap2_above{percentile}.sam"))
+    minimap2_above_edit_distance = os.path.abspath(os.path.join(
+        work_dir, f"minimap2_above{percentile}_distance.txt"))
+    minimap2_full_bam = os.path.abspath(os.path.join(
+        work_dir, f"minimap2_full.bam"))
+    minimap2_full_edit_distance = os.path.abspath(os.path.join(
+        work_dir, "minimap2_full_distance.txt"))
+    final_bam = os.path.abspath(final_output)
+    final_sam = os.path.abspath(os.path.join(work_dir, "final.sam"))
+    final_edit_distance = os.path.abspath(
+        os.path.join(work_dir, "final_edit_distance.txt"))
     raw_edit_distance = int(raw_edit_distance)
     config_list = [threads, percentile, work_dir, ngmlr_above_bam, ngmlr_above_sam, ngmlr_above_edit_distance, minimap2_above_bam,
                    minimap2_above_sam, minimap2_above_edit_distance, minimap2_full_bam, minimap2_full_edit_distance, final_bam, final_sam, final_edit_distance, raw_edit_distance]
