@@ -258,7 +258,7 @@ def main(argv):
     above_percentile_reads = os.path.join(
         WORK_DIR, f"above_{percentile}.fasta")
     ngmlr_output = os.path.join(
-        WORK_DIR, f"ngmlr_above{percentile}.bam")
+        WORK_DIR, f"ngmlr_above{percentile}.sam")
 
     logger.info("run minimap2 on entire reads")
     run_minimap2(reference_file, read_file, minimap2_full_sam, pacbio)
