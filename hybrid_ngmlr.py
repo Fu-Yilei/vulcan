@@ -7,6 +7,8 @@ import logging
 import pysam
 from tqdm import tqdm
 import numpy as np
+import multiprocessing
+
 
 
 '''
@@ -55,36 +57,37 @@ def parseArgs(argv):
                         help="only generate config", action="store_true")
     parser.add_argument("-R", "--raw_edit_distance",
                         help="Use raw edit distance to do the cut-off", action="store_true")
-    parser.add_argument(
-        "-P", "--pacbio", help="Input reads is pacbio reads", action="store_true")
-    parser.add_argument(
-        "-C", "--pacbio_ccs", help="Input reads is pacbio ccs reads", action="store_true")
+    read_type = parser.add_mutually_exclusive_group(required=True)
+    read_type.add_argument(
+        "-clr", "--pacbio_clr", help="Input reads is pacbio CLR reads", action="store_true")
+    read_type.add_argument(
+        "-ccs", "--pacbio_ccs", help="Input reads is pacbio CCS reads", action="store_true")
+    read_type.add_argument(
+        "-ont", "--nanopore", help="Input reads is Nanopore reads", action="store_true")
     args = parser.parse_args(argv)
 
     return args
 
 
-def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, if_pacbio, if_ccs):
-    if if_pacbio:
-        if if_ccs:
-            logger.info("Use minimap2 PacBio CCS parameter")
-            minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
-        else:
-            logger.info("Use minimap2 PacBio parameter")
-            minimap2_cmd = f"minimap2 -x map-pb -a -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
+def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, read_type):
+    if read_type == "ccs":
+        logger.info("Use minimap2 PacBio CCS parameter")
+        minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
+    elif read_type == "clr":
+        logger.info("Use minimap2 PacBio CLR parameter")
+        minimap2_cmd = f"minimap2 -x map-pb -a --eqx -L -O 5,56 -E 4,1 -B 5 --secondary=no -z 400,50 -r 2k -Y -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
     else:
         logger.info("Use minimap2 Nanopore parameter")
-        minimap2_cmd = f"minimap2 -x map-ont -a -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
+        minimap2_cmd = f"minimap2 -x map-ont -a -z 600,200 -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
     logger.info(f"Executing: {minimap2_cmd}")
     os.system(minimap2_cmd)
     # subprocess.check_output(minimap2_cmd, shell=True)
     return minimap2_output
 
 
-def run_ngmlr(ngmlr_input_ref, ngmlr_input_reads, ngmlr_output,  if_pacbio):
-    if if_pacbio:
+def run_ngmlr(ngmlr_input_ref, ngmlr_input_reads, ngmlr_output, read_type):
+    if read_type == "ccs" or read_type == "clr":
         ngmlr_cmd = f"ngmlr -x pacbio -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
-
     else:
         ngmlr_cmd = f"ngmlr -x ont -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
     logger.info(f"Executing: {ngmlr_cmd}")
@@ -139,6 +142,21 @@ def generate_sorted_bam(input_sam, output_bam):
     os.system(transform_cmd)
     return output_bam
 
+
+def seperate_normalized_edit_distance_samfile(samfile, above_value_file, under_value_file, cut_off_value):
+    # samfile = pysam.AlignmentFile(input_sam, "r")
+    # above_f = pysam.AlignmentFile(above_value_bam, "wb", template=samfile)
+    # under_f = pysam.AlignmentFile(under_value_bam, "wb", template=samfile)
+    for read in samfile.fetch():
+        tags = dict(read.tags)
+        if "NM" in tags:
+            NM_distance = int(tags["NM"])
+            normalized_edit_distance = float(
+                NM_distance)/read.query_alignment_length
+            if normalized_edit_distance >= cut_off_value:
+                above_f.write(read)
+            else:
+                under_f.write(read)
 
 def seperate_sam_files(input_sam, under_value_bam, above_value_bam, cut_off_value,  raw_edit_distance):
 
@@ -238,23 +256,26 @@ def main(argv):
     reference_file = args.reference
     percentile = args.percentile
     raw_edit_distance = args.raw_edit_distance
-    if_ccs = args.pacbio_ccs
-    pacbio = args.pacbio
+    # if_ccs = args.pacbio_ccs
+    # pacbio = args.pacbio
     final_output = args.output
+    read_type = None
+    if args.pacbio_clr:
+        read_type = "clr"
+    elif args.pacbio_ccs:
+        read_type = "ccs"
+    elif args.nanopore:
+        read_type = "ont"
     if args.dry:
         generate_config_for_notebook(
             percentile, final_output, raw_edit_distance)
         exit()
 
-    # print(f"RAW: {raw_edit_distance}, pacbio: {pacbio}")
-    # LOG = os.path.join(WORK_DIR, "log.log")
     minimap2_full_sam = os.path.join(WORK_DIR, "minimap2_full.sam")
     minimap2_full_sam_primary = os.path.join(
         WORK_DIR, "minimap2_full_primary.sam")
     minimap2_full_distance = os.path.join(
         WORK_DIR, "minimap2_full_distance.txt")
-    # minimap2_under_percentile_sam = os.path.join(
-    #     WORK_DIR, f"minimap2_under{percentile}.sam")
     minimap2_above_percentile_bam = os.path.join(
         WORK_DIR, f"minimap2_above{percentile}.bam")
     minimap2_under_percentile_bam = os.path.join(
@@ -264,39 +285,49 @@ def main(argv):
     ngmlr_output = os.path.join(
         WORK_DIR, f"ngmlr_above{percentile}.sam")
 
+    # Pipeline Starts
     logger.info("run minimap2 on entire reads")
-    run_minimap2(reference_file, read_file, minimap2_full_sam, pacbio, if_ccs)
+    run_minimap2(reference_file, read_file, minimap2_full_sam, read_type)
     logger.info("...finished")
+
     logger.info("keep the primary mapping for edit distance calculation")
     keep_primary_mapping(minimap2_full_sam, minimap2_full_sam_primary)
     logger.info("...finished")
+
     logger.info("generate edit distance file")
     generate_distance_file(minimap2_full_sam_primary,
                            minimap2_full_distance, raw_edit_distance)
     logger.info("...finished")
+
     logger.info("gettng the number of cut-off")
     dist_percentile_num = get_distance_percentile_from_file(
         minimap2_full_distance, percentile)
     logger.info("...finished")
+
     logger.info("seperate sam files")
     seperate_sam_files(minimap2_full_sam, minimap2_under_percentile_bam,
                        minimap2_above_percentile_bam, dist_percentile_num, raw_edit_distance)
     logger.info("...finished")
+
     logger.info("extracting reads have edit distance above cut-off value")
     bam_to_reads(minimap2_above_percentile_bam,
                  above_percentile_reads)
     logger.info("...finished")
+
     logger.info("run NGMLR on extracted reads")
     run_ngmlr(reference_file, above_percentile_reads,
-              ngmlr_output, pacbio)
+              ngmlr_output, read_type)
     logger.info("...finished")
+
     logger.info("merge NGMLR's result and minimap2's under cut-off results")
     merge_bam_files(minimap2_under_percentile_bam, ngmlr_output, final_output)
     logger.info("...finished")
+
     logger.info("Generating configs for jupyter notebook evaluation")
     generate_config_for_notebook(
         percentile, final_output, raw_edit_distance)
     logger.info("...finished")
+
     logger.info("All Finished")
 
 
