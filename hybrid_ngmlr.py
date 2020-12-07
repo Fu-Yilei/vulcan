@@ -10,7 +10,6 @@ import numpy as np
 import multiprocessing
 
 
-
 '''
 hybrid_NGMLR: a pipeline connects minimap2 and NGMLR
 @author: Yilei Fu
@@ -45,8 +44,8 @@ def parseArgs(argv):
     parser.add_argument("-t", "--threads",  type=int,
                         help="threads",
                         default=1)
-    parser.add_argument("-i", "--input", type=str,
-                        help="input read path")
+    parser.add_argument("-i", "--input", nargs="+", type=str,
+                        help="input read path, can accept multiple files")
     parser.add_argument("-o", "--output", type=str,
                         help="output bamfile path")
     parser.add_argument("-p", "--percentile", type=int,
@@ -70,28 +69,42 @@ def parseArgs(argv):
 
 
 def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, read_type):
+    read_as_input = " ".join(minimap2_input_reads)
     if read_type == "ccs":
         logger.info("Use minimap2 PacBio CCS parameter")
-        minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
+        # minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
+        ll
+        minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
+
     elif read_type == "clr":
         logger.info("Use minimap2 PacBio CLR parameter")
-        minimap2_cmd = f"minimap2 -x map-pb -a --eqx -L -O 5,56 -E 4,1 -B 5 --secondary=no -z 400,50 -r 2k -Y -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
+        minimap2_cmd = f"minimap2 -x map-pb -a --eqx -L -O 5,56 -E 4,1 -B 5 --secondary=no -z 400,50 -r 2k -Y -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     else:
         logger.info("Use minimap2 Nanopore parameter")
-        minimap2_cmd = f"minimap2 -x map-ont -a -z 600,200 -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {minimap2_input_reads}"
+        minimap2_cmd = f"minimap2 -x map-ont -a -z 600,200 -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     logger.info(f"Executing: {minimap2_cmd}")
     os.system(minimap2_cmd)
     # subprocess.check_output(minimap2_cmd, shell=True)
     return minimap2_output
 
 
+def filter_sam_file(input_sam, output_sam):
+    os.system(f"sed -E '/\t[0-9]+S\t/d' {input_sam} > {output_sam}")
+    return output_sam
+
+
 def run_ngmlr(ngmlr_input_ref, ngmlr_input_reads, ngmlr_output, read_type):
     if read_type == "ccs" or read_type == "clr":
         ngmlr_cmd = f"ngmlr -x pacbio -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
+        logger.info(f"Executing: {ngmlr_cmd}")
+        os.system(ngmlr_cmd)
     else:
-        ngmlr_cmd = f"ngmlr -x ont -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
-    logger.info(f"Executing: {ngmlr_cmd}")
-    os.system(ngmlr_cmd)
+        ngmlr_temp = os.path.join(WORK_DIR, "ngmlr_ont_temp.sam")
+        ngmlr_cmd = f"ngmlr -x ont --bam-fix -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_temp}"
+        logger.info(f"Executing: {ngmlr_cmd}")
+        os.system(ngmlr_cmd)
+        filter_sam_file(ngmlr_temp, ngmlr_output)
+
     return ngmlr_output
 
 
@@ -142,21 +155,6 @@ def generate_sorted_bam(input_sam, output_bam):
     os.system(transform_cmd)
     return output_bam
 
-
-def seperate_normalized_edit_distance_samfile(samfile, above_value_file, under_value_file, cut_off_value):
-    # samfile = pysam.AlignmentFile(input_sam, "r")
-    # above_f = pysam.AlignmentFile(above_value_bam, "wb", template=samfile)
-    # under_f = pysam.AlignmentFile(under_value_bam, "wb", template=samfile)
-    for read in samfile.fetch():
-        tags = dict(read.tags)
-        if "NM" in tags:
-            NM_distance = int(tags["NM"])
-            normalized_edit_distance = float(
-                NM_distance)/read.query_alignment_length
-            if normalized_edit_distance >= cut_off_value:
-                above_f.write(read)
-            else:
-                under_f.write(read)
 
 def seperate_sam_files(input_sam, under_value_bam, above_value_bam, cut_off_value,  raw_edit_distance):
 
@@ -237,7 +235,8 @@ def generate_config_for_notebook(percentile, final_output, raw_edit_distance):
         os.path.join(work_dir, "final_edit_distance.txt"))
     raw_edit_distance = int(raw_edit_distance)
     config_list = [threads, percentile, work_dir, ngmlr_above_bam, ngmlr_above_sam, ngmlr_above_edit_distance, minimap2_above_bam,
-                   minimap2_above_sam, minimap2_above_edit_distance, minimap2_full_bam, minimap2_full_edit_distance, final_bam, final_sam, final_edit_distance, raw_edit_distance]
+                   minimap2_above_sam, minimap2_above_edit_distance, minimap2_full_bam, 
+                   minimap2_full_edit_distance, final_bam, final_sam, final_edit_distance, raw_edit_distance]
     with open(config_file, "w") as config_f:
         for config in config_list:
             config_f.writelines(f"{config}\n")
