@@ -3,11 +3,9 @@
 Program requirement: 
 minimap2, ngmlr, samtools and bamtools.
 
-For SV evaluation: Nanosim-h, Sniffles and SURVIVOR.
-
 program usage:
 
-    usage: hybrid_ngmlr.py [-h] [-w WORK_DIR] [-t THREADS] [-i INPUT] [-o OUTPUT] [-p PERCENTILE] [-r REFERENCE] [-d] [-R] [-P]
+    usage: python vulcan.py [-h] [-w WORK_DIR] [-t THREADS] [-i INPUT] [-o OUTPUT] [-p PERCENTILE] [-r REFERENCE] [-d] [-R] [-P]
 
     hybrid_NGMLR: a pipeline connects minimap2 and NGMLR
 
