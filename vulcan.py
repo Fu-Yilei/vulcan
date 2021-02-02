@@ -62,9 +62,17 @@ def parseArgs(argv):
     read_type.add_argument(
         "-clr", "--pacbio_clr", help="Input reads is pacbio CLR reads", action="store_true")
     read_type.add_argument(
-        "-ccs", "--pacbio_ccs", help="Input reads is pacbio CCS reads", action="store_true")
+        "-hifi", "--pacbio_hifi", help="Input reads is pacbio hifi reads", action="store_true")
     read_type.add_argument(
         "-ont", "--nanopore", help="Input reads is Nanopore reads", action="store_true")
+    read_type.add_argument(
+        "-any", "--anylongread", help="Don't know which kind of long read", action="store_true")
+    read_type.add_argument(
+        "-hclr", "--humanclr", help="Human pacbio CLR read", action="store_true")
+    read_type.add_argument(
+        "-hhifi", "--humanhifi", help="Human pacbio hifi reads", action="store_true")
+    read_type.add_argument(
+        "-hont", "--humannanopore", help="Human Nanopore reads", action="store_true")
     read_type.add_argument(
         "-cmd", "--custom_cmd", help="Use minimap2 and NGMLR with user's own parameter setting", action="store_true")
     # By default, minimap2 -a --MD -t -o, reference and input are required, will not be included
@@ -76,28 +84,35 @@ def parseArgs(argv):
 
 def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, read_type):
     read_as_input = " ".join(minimap2_input_reads)
-    if read_type == "ccs":
-        logger.info("Use minimap2 PacBio CCS parameter")
-        # minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
+    if read_type == "hifi":
+        logger.info("Use minimap2 PacBio hifi parameter")
         minimap2_cmd = f"minimap2 -a -x map-pb --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     elif read_type == "clr":
         logger.info("Use minimap2 PacBio CLR parameter")
-        # minimap2_cmd = f"minimap2 -x map-pb -a --eqx -L -O 5,56 -E 4,1 -B 5 --secondary=no -z 400,50 -r 2k -Y -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
         minimap2_cmd = f"minimap2 -a -x map-pb --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
+    elif read_type == "any":
+        logger.info("Use minimap2 universial parameter")
+        minimap2_cmd = f"minimap2 -a --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
+    elif read_type == "hclr":
+        logger.info("Use minimap2 suggested human clr parameter")
+        minimap2_cmd = f"minimap2 -x map-pb -a --eqx -L -O 5,56 -E 4,1 -B 5 --secondary=no -z 400,50 -r 2k -Y -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
+    elif read_type == "hhifi":
+        logger.info("Use minimap2 suggested human hifi parameter")
+        minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
+    elif read_type == "hont":
+        logger.info("Use minimap2 suggested Human Nanopore parameter")
+        minimap2_cmd = f"minimap2 -x map-ont -a -z 600,200 -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     else:
         logger.info("Use minimap2 Nanopore parameter")
-        # minimap2_cmd = f"minimap2 -x map-ont -a -z 600,200 -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
         minimap2_cmd = f"minimap2 -x map-ont -a --MD -t {THREADS} -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
 
     logger.info(f"Executing: {minimap2_cmd}")
     os.system(minimap2_cmd)
-    # subprocess.check_output(minimap2_cmd, shell=True)
     return minimap2_output
 
 def run_cmd_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, params):
     read_as_input = " ".join(minimap2_input_reads)
     logger.info("Use minimap2 custom parameter")
-    # minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     minimap2_cmd = f"minimap2 -a --MD {params} -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     logger.info(f"Executing: {minimap2_cmd}")
     os.system(minimap2_cmd)
@@ -109,8 +124,12 @@ def filter_sam_file(input_sam, output_sam):
 
 
 def run_ngmlr(ngmlr_input_ref, ngmlr_input_reads, ngmlr_output, read_type):
-    if read_type == "ccs" or read_type == "clr":
+    if read_type == "hifi" or "clr" or "hhifi" or "hclr":
         ngmlr_cmd = f"ngmlr -x pacbio --bam-fix -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
+        logger.info(f"Executing: {ngmlr_cmd}")
+        os.system(ngmlr_cmd)
+    elif read_type == "any":
+        ngmlr_cmd = f"ngmlr --bam-fix -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
         logger.info(f"Executing: {ngmlr_cmd}")
         os.system(ngmlr_cmd)
     else:
@@ -285,7 +304,7 @@ def main(argv):
     reference_file = args.reference
     percentile = args.percentile
     raw_edit_distance = args.raw_edit_distance
-    # if_ccs = args.pacbio_ccs
+    # if_hifi = args.pacbio_hifi
     # pacbio = args.pacbio
     final_output = args.output
     read_type = None
@@ -295,10 +314,18 @@ def main(argv):
         FULL = True
     if args.pacbio_clr:
         read_type = "clr"
-    elif args.pacbio_ccs:
-        read_type = "ccs"
+    elif args.pacbio_hifi:
+        read_type = "hifi"
     elif args.nanopore:
         read_type = "ont"
+    elif args.anylongread:
+        read_type = "any"
+    elif args.humanclr:
+        read_type = "hclr"
+    elif args.humanhifi:
+        read_type = "hhifi"
+    elif args.humannanopore:
+        read_type = "hont"
     elif args.custom_cmd:
         read_type = "cmd"
         minimap2_cmd = input("Enter the minimap2 command other than -a, --MD, -t, -o, reference and input: ")
