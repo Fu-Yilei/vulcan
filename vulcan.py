@@ -50,7 +50,7 @@ def parseArgs(argv):
                         default="./vulcan_work")
     parser.add_argument("-t", "--threads",  type=int,
                         help="threads, default: 1",  default=1)
-    parser.add_argument("-p", "--percentile", type=int,
+    parser.add_argument("-p", "--percentile", nargs="+", type=int,
                         help="percentile of cut-off, default: 90", default=90)
     parser.add_argument("-f", "--full",
                         help="keep all temp file", action="store_true")
@@ -110,6 +110,7 @@ def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, read
     os.system(minimap2_cmd)
     return minimap2_output
 
+
 def run_cmd_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, params):
     read_as_input = " ".join(minimap2_input_reads)
     logger.info("Use minimap2 custom parameter")
@@ -117,6 +118,7 @@ def run_cmd_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, 
     logger.info(f"Executing: {minimap2_cmd}")
     os.system(minimap2_cmd)
     return minimap2_output
+
 
 def filter_sam_file(input_sam, output_sam):
     os.system(f"sed -E '/\t[0-9]+S\t/d' {input_sam} > {output_sam}")
@@ -142,11 +144,13 @@ def run_ngmlr(ngmlr_input_ref, ngmlr_input_reads, ngmlr_output, read_type):
             os.system(f"rm {ngmlr_temp} &")
     return ngmlr_output
 
+
 def run_cmd_ngmlr(ngmlr_input_ref, ngmlr_input_reads, ngmlr_output, params):
     ngmlr_cmd = f"ngmlr {params} --bam-fix -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
     logger.info(f"Executing: {ngmlr_cmd}")
     os.system(ngmlr_cmd)
     return ngmlr_output
+
 
 def keep_primary_mapping(input_sam, output_sam):
     samtools_cmd = f"samtools view -h -@ {THREADS - 1} -F 2308 {input_sam} -o {output_sam}"
@@ -156,49 +160,54 @@ def keep_primary_mapping(input_sam, output_sam):
 
 
 def sort_bam_from_bam(input_bam, output_bam):
-    sort_bam_cmd = f"samtools sort -@ {THREADS} {input_bam} > {output_bam}"
+    sort_bam_cmd = f"samtools sort -@ {THREADS-1} -T {WORK_DIR} {input_bam} > {output_bam}"
     logger.info(f"Executing: {sort_bam_cmd}")
     os.system(sort_bam_cmd)
     return output_bam
 
 
-def generate_distance_file(input_sam, output_txt, raw_edit_distance):
-    if raw_edit_distance:
-        os.system(f"grep -o -E \"NM:i:[0-9]+\" {input_sam} > {output_txt}")
-    else:
-        samfile = pysam.AlignmentFile(input_sam, "r")
-        with open(output_txt, "w") as out_f:
-            for read in tqdm(samfile.fetch()):
-                tags = dict(read.tags)
-                if "NM" in tags:
-                    NM_distance = int(tags["NM"])
-                    normalized_edit_distance = float(
-                        NM_distance)/read.query_alignment_length
-                    out_f.writelines(f"NM:i:{normalized_edit_distance}\n")
-    return output_txt
+def generate_distance_file(input_sam, percentile, raw_edit_distance):
+    distance_l = []
+    samfile = pysam.AlignmentFile(input_sam, "r")
+    # with open(output_txt, "w") as out_f:
+    for read in tqdm(samfile.fetch()):
+        tags = dict(read.tags)
+        if "NM" in tags:
+            NM_distance = int(tags["NM"])
+            if raw_edit_distance:
+                distance_l.append(NM_distance)
+            else:
+                normalized_edit_distance = float(
+                    NM_distance)/read.query_alignment_length
+                distance_l.append(normalized_edit_distance)
+    dist_percentile_num = np.percentile(list(distance_l), percentile)
 
-def add_dist_list(distance_list, dist):
-    distance_list.append(float(dist[:-1].split(":")[2]))
-
-def get_distance_percentile_from_file(distance_file, percentile):
-    with open(distance_file, "r") as distance_f:
-        distance = distance_f.readlines()
-    # distance_list = []
-    manager = Manager()
-    distance_list = manager.list()
-    pool=Pool(THREADS)
-    for dist in distance:
-        pool.apply_async(func=add_dist_list, args=(distance_list, dist))
-        # distance_list.append(float(dist[:-1].split(":")[2]))
-    # dist_mean = np.mean(distance_list)
-    pool.close()
-    pool.join()
-    dist_percentile_num = np.percentile(list(distance_list), percentile)
     return dist_percentile_num
 
 
+# def add_dist_list(distance_list, dist):
+#     distance_list.append(float(dist[:-1].split(":")[2]))
+
+
+# def get_distance_percentile_from_file(distance_file, percentile):
+#     with open(distance_file, "r") as distance_f:
+#         distance = distance_f.readlines()
+#     # distance_list = []
+#     manager = Manager()
+#     distance_list = manager.list()
+#     pool = Pool(THREADS)
+#     for dist in distance:
+#         pool.apply_async(func=add_dist_list, args=(distance_list, dist))
+#     # distance_list.append(float(dist[:-1].split(":")[2]))
+#     # dist_mean = np.mean(distance_list)
+#     pool.close()
+#     pool.join()
+#     dist_percentile_num = np.percentile(list(distance_list), percentile)
+#     return dist_percentile_num
+
+
 def generate_sorted_bam(input_sam, output_bam):
-    transform_cmd = f"samtools view -bS -@ {THREADS} {input_sam} | samtools sort -@ {THREADS} -o {output_bam}"
+    transform_cmd = f"samtools view -bS -@ {THREADS-1} {input_sam} | samtools sort -@ {THREADS-1} -T {WORK_DIR} -o {output_bam}"
     logger.info(transform_cmd)
     os.system(transform_cmd)
     return output_bam
@@ -239,20 +248,22 @@ def seperate_sam_files(input_sam, under_value_bam, above_value_bam, cut_off_valu
                 else:
                     under_f.write(read)
 
+
 def bam_to_reads(input_bam, output_reads):
-    bam_to_reads_cmd = f"samtools fasta -@ {THREADS} {input_bam} > {output_reads} "
+    bam_to_reads_cmd = f"samtools fasta -@ {THREADS-1} {input_bam} > {output_reads} "
     logger.info(bam_to_reads_cmd)
     os.system(bam_to_reads_cmd)
 
 
 def merge_bam_files(under_value_bam, above_value_bam, final_output):
     final_unsorted_bam = os.path.join(WORK_DIR, "final_unsorted.bam")
-    merge_bam_cmd = f"samtools merge {final_unsorted_bam} {under_value_bam} {above_value_bam} -@ {THREADS}"
+    merge_bam_cmd = f"samtools merge {final_unsorted_bam} {under_value_bam} {above_value_bam} -@ {THREADS-1}"
     logger.info(f"Executing: {merge_bam_cmd}")
     os.system(merge_bam_cmd)
     sort_bam_from_bam(final_unsorted_bam, final_output)
     if FULL == False:
         os.system(f"rm {final_unsorted_bam} &")
+
 
 def generate_config_for_notebook(percentile, final_output, raw_edit_distance):
     # TODO
@@ -328,8 +339,10 @@ def main(argv):
         read_type = "hont"
     elif args.custom_cmd:
         read_type = "cmd"
-        minimap2_cmd = input("Enter the minimap2 command other than -a, --MD, -t, -o, reference and input: ")
-        ngmlr_cmd = input("Enter ngmlr command other than --bam-fix, -t, -r, -q, -o: ")
+        minimap2_cmd = input(
+            "Enter the minimap2 command other than -a, --MD, -t, -o, reference and input: ")
+        ngmlr_cmd = input(
+            "Enter ngmlr command other than --bam-fix, -t, -r, -q, -o: ")
     if args.dry:
         generate_config_for_notebook(
             percentile, final_output, raw_edit_distance)
@@ -340,19 +353,19 @@ def main(argv):
         WORK_DIR, "minimap2_full_primary.sam")
     minimap2_full_distance = os.path.join(
         WORK_DIR, "minimap2_full_distance.txt")
-    minimap2_above_percentile_bam = os.path.join(
-        WORK_DIR, f"minimap2_above{percentile}.bam")
-    minimap2_under_percentile_bam = os.path.join(
-        WORK_DIR, f"minimap2_under{percentile}.bam")
-    above_percentile_reads = os.path.join(
-        WORK_DIR, f"above_{percentile}.fasta")
-    ngmlr_output = os.path.join(
-        WORK_DIR, f"ngmlr_above{percentile}.sam")
+    # minimap2_above_percentile_bam = os.path.join(
+    #     WORK_DIR, f"minimap2_above{percentile}.bam")
+    # minimap2_under_percentile_bam = os.path.join(
+    #     WORK_DIR, f"minimap2_under{percentile}.bam")
+
+    # ngmlr_output = os.path.join(
+    #     WORK_DIR, f"ngmlr_above{percentile}.sam")
 
     # Pipeline Starts
     logger.info("run minimap2 on entire reads")
     if read_type == "cmd":
-        run_cmd_minimap2(reference_file, read_file, minimap2_full_sam, minimap2_cmd)
+        run_cmd_minimap2(reference_file, read_file,
+                         minimap2_full_sam, minimap2_cmd)
     else:
         run_minimap2(reference_file, read_file, minimap2_full_sam, read_type)
     logger.info("...finished")
@@ -361,52 +374,57 @@ def main(argv):
     keep_primary_mapping(minimap2_full_sam, minimap2_full_sam_primary)
     logger.info("...finished")
 
-    logger.info("generate edit distance file")
-    generate_distance_file(minimap2_full_sam_primary,
-                           minimap2_full_distance, raw_edit_distance)
-    if FULL == False:
-        os.system(f"rm {minimap2_full_sam_primary} &")
-    logger.info("...finished")
-    logger.info("gettng the number of cut-off")
-    dist_percentile_num = get_distance_percentile_from_file(
-        minimap2_full_distance, percentile)
-    if FULL == False:
-        os.system(f"rm {minimap2_full_distance} &")
-    logger.info("...finished")
-    logger.info("seperate sam files")
-    seperate_sam_files(minimap2_full_sam, minimap2_under_percentile_bam,
-                       minimap2_above_percentile_bam, dist_percentile_num, raw_edit_distance)
-    if FULL == False:
-        os.system(f"rm {minimap2_full_sam} &")
-    logger.info("...finished")
-    logger.info("extracting reads have edit distance above cut-off value")
-    bam_to_reads(minimap2_above_percentile_bam,
-                 above_percentile_reads)
-    if FULL == False:
-        os.system(f"rm {minimap2_above_percentile_bam} &")
-    logger.info("...finished")
-    logger.info("run NGMLR on extracted reads")
-    if read_type == "cmd":
-        run_cmd_ngmlr(reference_file, above_percentile_reads,
-              ngmlr_output, ngmlr_cmd)
-    else:
-        run_ngmlr(reference_file, above_percentile_reads,
-              ngmlr_output, read_type)
-    if FULL == False:
-        os.system(f"rm {above_percentile_reads} &")
-    logger.info("...finished")
-    logger.info("merge NGMLR's result and minimap2's under cut-off results")
-    merge_bam_files(minimap2_under_percentile_bam, ngmlr_output, final_output)
-    if FULL == False:
-        os.system(f"rm {minimap2_under_percentile_bam} &")
-        os.system(f"rm {ngmlr_output} &")
-    logger.info("...finished")
-    if FULL:
-        logger.info("Generating configs for jupyter notebook evaluation")
-        generate_config_for_notebook(
-            percentile, final_output, raw_edit_distance)
+
+    for percentile_run in percentile:
+        above_percentile_reads = os.path.join(
+            WORK_DIR, f"above_{percentile_run}.fasta")
+        minimap2_above_percentile_bam = os.path.join(
+            WORK_DIR, f"minimap2_above{percentile_run}.bam")
+        minimap2_under_percentile_bam = os.path.join(
+            WORK_DIR, f"minimap2_under{percentile_run}.bam")
+        ngmlr_output = os.path.join(
+            WORK_DIR, f"ngmlr_above{percentile_run}.sam")
+        logger.info("gettng the number of cut-off")
+        logger.info("generate edit distance file")
+        dist_percentile_num = generate_distance_file(minimap2_full_sam_primary,
+                            percentile_run, raw_edit_distance)
         logger.info("...finished")
-    logger.info("All Finished")
+        logger.info("seperate sam files")
+        seperate_sam_files(minimap2_full_sam, minimap2_under_percentile_bam,
+                           minimap2_above_percentile_bam, dist_percentile_num, raw_edit_distance)
+        logger.info("...finished")
+        logger.info("extracting reads have edit distance above cut-off value")
+        bam_to_reads(minimap2_above_percentile_bam,
+                     above_percentile_reads)
+        if FULL == False:
+            os.system(f"rm {minimap2_above_percentile_bam} &")
+        logger.info("...finished")
+        logger.info("run NGMLR on extracted reads")
+        if read_type == "cmd":
+            run_cmd_ngmlr(reference_file, above_percentile_reads,
+                          ngmlr_output, ngmlr_cmd)
+        else:
+            run_ngmlr(reference_file, above_percentile_reads,
+                      ngmlr_output, read_type)
+        if FULL == False:
+            os.system(f"rm {above_percentile_reads} &")
+        logger.info("...finished")
+        logger.info("merge NGMLR's result and minimap2's under cut-off results")
+        merge_bam_files(minimap2_under_percentile_bam,
+                        ngmlr_output, f"{final_output}_{percentile_run}.bam")
+        if FULL == False:
+            os.system(f"rm {minimap2_under_percentile_bam} &")
+            os.system(f"rm {ngmlr_output} &")
+        logger.info("...finished")
+        if FULL:
+            logger.info("Generating configs for jupyter notebook evaluation")
+            generate_config_for_notebook(
+                percentile_run, final_output, raw_edit_distance)
+            logger.info("...finished")
+        logger.info(f"All Finished, percentile {percentile_run}")
+    # if FULL == False:
+    #     os.system(f"rm {minimap2_full_distance} &")
+        # os.system(f"rm {minimap2_full_sam} &")
 
 
 if __name__ == "__main__":
