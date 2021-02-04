@@ -1,0 +1,4 @@
+minimap2
+ngmlr
+samtools=1.9
+bamtools
