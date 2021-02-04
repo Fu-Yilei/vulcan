@@ -45,11 +45,11 @@ def parseArgs(argv):
     requiredNamed = parser.add_argument_group('Required arguments:')
 
     requiredNamed.add_argument("-i", "--input",  nargs="+", type=str,
-                               help="input read path, can accept multiple files")
+                               help="input read path, can accept multiple files", required=True)
     requiredNamed.add_argument("-r", "--reference", type=str,
-                               help="reference path")
+                               help="reference path", required=True)
     requiredNamed.add_argument("-o", "--output", type=str,
-                               help="vulcan's output's prefix, the output will be prefix_{percentile}.bam")
+                               help="vulcan's output's prefix, the output will be prefix_{percentile}.bam", required=True)
     parser.add_argument("-w", "--work_dir",  type=str,
                         help="Directory of work, store temp files, default: ./vulcan_work",
                         default="./vulcan_work")
