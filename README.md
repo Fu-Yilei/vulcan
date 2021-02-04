@@ -5,7 +5,7 @@ Program requirement:
 
 program usage:
     
-    usage: vulcan [-h] [-i INPUT [INPUT ...]] [-r REFERENCE] [-o OUTPUT] [-w WORK_DIR] [-t THREADS] [-p PERCENTILE [PERCENTILE ...]] [-f] [-d] [-R] [-clr | -hifi | -ont | -any | -hclr | -hhifi | -hont | -cmd]
+    usage: vulcan [-h] -i INPUT [INPUT ...] -r REFERENCE -o OUTPUT [-w WORK_DIR] [-t THREADS] [-p PERCENTILE [PERCENTILE ...]] [-f] [-d] [-R] [-clr | -hifi | -ont | -any | -hclr | -hhifi | -hont | -cmd]
 
     Vulcan: Map long and prosper🖖, a pipeline melds minimap2 and NGMLR
 
@@ -37,8 +37,7 @@ program usage:
     -r REFERENCE, --reference REFERENCE
                             reference path
     -o OUTPUT, --output OUTPUT
-                            vulcan's output bamfile path
+                            vulcan's output's prefix, the output will be prefix_{percentile}.bam
 
 example: 
-
-    python vulcan.py -r {reference} -i {input} -o {output} -t 60 -any
+    ./vulcan -r ./test/GCF_000146045.2_R64_genomic.fna -i ./test/test_reads.fa -w ./test/ -o vulcan
