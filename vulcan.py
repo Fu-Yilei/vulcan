@@ -185,27 +185,6 @@ def generate_distance_file(input_sam, percentile, raw_edit_distance):
     return dist_percentile_num
 
 
-# def add_dist_list(distance_list, dist):
-#     distance_list.append(float(dist[:-1].split(":")[2]))
-
-
-# def get_distance_percentile_from_file(distance_file, percentile):
-#     with open(distance_file, "r") as distance_f:
-#         distance = distance_f.readlines()
-#     # distance_list = []
-#     manager = Manager()
-#     distance_list = manager.list()
-#     pool = Pool(THREADS)
-#     for dist in distance:
-#         pool.apply_async(func=add_dist_list, args=(distance_list, dist))
-#     # distance_list.append(float(dist[:-1].split(":")[2]))
-#     # dist_mean = np.mean(distance_list)
-#     pool.close()
-#     pool.join()
-#     dist_percentile_num = np.percentile(list(distance_list), percentile)
-#     return dist_percentile_num
-
-
 def generate_sorted_bam(input_sam, output_bam):
     transform_cmd = f"samtools view -bS -@ {THREADS-1} {input_sam} | samtools sort -@ {THREADS-1} -T {WORK_DIR} -o {output_bam}"
     logger.info(transform_cmd)
