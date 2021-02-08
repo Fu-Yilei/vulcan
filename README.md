@@ -1,7 +1,8 @@
 # Vulcan
 
-Program requirement: 
+Installation: 
 
+    conda install vulcan
 
 program usage:
     
@@ -40,4 +41,5 @@ program usage:
                             vulcan's output's prefix, the output will be prefix_{percentile}.bam
 
 example: 
+
     ./vulcan -r ./test/GCF_000146045.2_R64_genomic.fna -i ./test/test_reads.fa -w ./test/ -o vulcan
