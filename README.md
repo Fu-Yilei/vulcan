@@ -1,4 +1,6 @@
 # Vulcan
+https://anaconda.org/bioconda/vulcan/badges/version.svg https://anaconda.org/bioconda/vulcan/badges/installer/conda.svg https://anaconda.org/bioconda/vulcan/badges/latest_release_date.svg https://anaconda.org/bioconda/vulcan/badges/downloads.svg
+
 
 Installation: 
 
