@@ -4,7 +4,7 @@
 
 Installation: 
 
-    conda install vulcan
+    conda install -c bioconda vulcan
 
 program usage:
     
