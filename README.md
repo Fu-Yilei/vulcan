@@ -10,8 +10,9 @@ program usage:
     
     usage: vulcan [-h] -i INPUT [INPUT ...] -r REFERENCE -o OUTPUT [-w WORK_DIR] [-t THREADS] [-p PERCENTILE [PERCENTILE ...]] [-f] [-d] [-R] [-clr | -hifi | -ont | -any | -hclr | -hhifi | -hont | -cmd]
 
-    Vulcan: Map long and prosper🖖, a pipeline melds minimap2 and NGMLR
 
+    vulcan: map long reads and prosper🖖, a long read mapping pipeline that melds minimap2 and NGMLR
+    
     optional arguments:
     -h, --help            show this help message and exit
     -w WORK_DIR, --work_dir WORK_DIR
