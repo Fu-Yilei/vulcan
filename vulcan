@@ -39,7 +39,7 @@ def parseArgs(argv):
     """
 
     parser = argparse.ArgumentParser(
-        description="Vulcan: Map long and prosper🖖, a pipeline melds minimap2 and NGMLR", formatter_class=RawTextHelpFormatter)
+        description="vulcan: map long reads and prosper🖖, a long read mapping pipeline that melds minimap2 and NGMLR", formatter_class=RawTextHelpFormatter)
     # parser.add_argument("-i", "--input", nargs="+", type=str,
     #                     help="input read path, can accept multiple files", required=True)
     requiredNamed = parser.add_argument_group('Required arguments:')
