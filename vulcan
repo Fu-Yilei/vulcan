@@ -134,7 +134,7 @@ def filter_sam_file(input_sam, output_sam):
 
 
 def run_ngmlr(ngmlr_input_ref, ngmlr_input_reads, ngmlr_output, read_type):
-    if read_type == "hifi" or "clr" or "hhifi" or "hclr":
+    if read_type in ["hifi", "clr", "hhifi", "hclr"]:
         ngmlr_cmd = f"ngmlr -x pacbio --bam-fix -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output}"
         logger.info(f"Executing: {ngmlr_cmd}")
         os.system(ngmlr_cmd)
