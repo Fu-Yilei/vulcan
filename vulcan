@@ -57,6 +57,8 @@ def parseArgs(argv):
                         help="threads, default: 1",  default=1)
     parser.add_argument("-p", "--percentile", nargs="+", type=int,
                         help="percentile of cut-off, default: 90", default=[90])
+    parser.add_argument("-m", "--minimap2",
+                        help="use existing minimap2 output as input", type=str)
     parser.add_argument("-f", "--full",
                         help="keep all temp file", action="store_true")
     parser.add_argument("-d", "--dry",
@@ -82,7 +84,7 @@ def parseArgs(argv):
         "-cmd", "--custom_cmd", help="Use minimap2 and NGMLR with user's own parameter setting", action="store_true")
     # By default, minimap2 -a --MD -t -o, reference and input are required, will not be included
     # ngmlr --bam-fix -t {THREADS} -r {ngmlr_input_ref} -q {ngmlr_input_reads} -o {ngmlr_output} are required
-    if len(argv)==0:
+    if len(argv) == 0:
         parser.print_help(sys.stderr)
         sys.exit(1)
     args = parser.parse_args(argv)
@@ -103,12 +105,15 @@ def run_minimap2(minimap2_input_ref, minimap2_input_reads, minimap2_output, read
         minimap2_cmd = f"minimap2 -a --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     elif read_type == "hclr":
         logger.info("Use minimap2 suggested human clr parameter")
+        # GIAB  recommended parameters
         minimap2_cmd = f"minimap2 -x map-pb -a --eqx -L -O 5,56 -E 4,1 -B 5 --secondary=no -z 400,50 -r 2k -Y -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     elif read_type == "hhifi":
         logger.info("Use minimap2 suggested human hifi parameter")
+        # GIAB  recommended parameters
         minimap2_cmd = f"minimap2 -a -k 19 -O 5,56  -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no --MD -t {THREADS}  -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     elif read_type == "hont":
         logger.info("Use minimap2 suggested Human Nanopore parameter")
+        # GIAB  recommended parameters
         minimap2_cmd = f"minimap2 -x map-ont -a -z 600,200 -t {THREADS} --MD -o {minimap2_output}  {minimap2_input_ref} {read_as_input}"
     else:
         logger.info("Use minimap2 Nanopore parameter")
@@ -329,26 +334,34 @@ def main(argv):
             "Enter the minimap2 command other than -a, --MD, -t, -o, reference and input: ")
         ngmlr_cmd = input(
             "Enter ngmlr command other than --bam-fix, -t, -r, -q, -o: ")
+    else:
+        read_type = "any"
     if args.dry:
         generate_config_for_notebook(
             percentile, final_output, raw_edit_distance)
         exit()
+    if args.minimap2:
+        minimap2_full_sam = args.minimap2
+        minimap2_full_sam_primary = os.path.join(
+            WORK_DIR, "minimap2_full_primary.sam")
+        logger.info("keep the primary mapping for edit distance calculation")
+        keep_primary_mapping(minimap2_full_sam, minimap2_full_sam_primary)
+        logger.info("...finished")
     else:
-        read_type = "any"
-    minimap2_full_sam = os.path.join(WORK_DIR, "minimap2_full.sam")
-    minimap2_full_sam_primary = os.path.join(
-        WORK_DIR, "minimap2_full_primary.sam")
-    logger.info("run minimap2 on entire reads")
-    if read_type == "cmd":
-        run_cmd_minimap2(reference_file, read_file,
-                         minimap2_full_sam, minimap2_cmd)
-    else:
-        run_minimap2(reference_file, read_file, minimap2_full_sam, read_type)
-    logger.info("...finished")
+        minimap2_full_sam = os.path.join(WORK_DIR, "minimap2_full.sam")
+        minimap2_full_sam_primary = os.path.join(
+            WORK_DIR, "minimap2_full_primary.sam")
+        logger.info("run minimap2 on entire reads")
+        if read_type == "cmd":
+            run_cmd_minimap2(reference_file, read_file,
+                            minimap2_full_sam, minimap2_cmd)
+        else:
+            run_minimap2(reference_file, read_file, minimap2_full_sam, read_type)
+        logger.info("...finished")
 
-    logger.info("keep the primary mapping for edit distance calculation")
-    keep_primary_mapping(minimap2_full_sam, minimap2_full_sam_primary)
-    logger.info("...finished")
+        logger.info("keep the primary mapping for edit distance calculation")
+        keep_primary_mapping(minimap2_full_sam, minimap2_full_sam_primary)
+        logger.info("...finished")
 
     for percentile_run in percentile:
         above_percentile_reads = os.path.join(
